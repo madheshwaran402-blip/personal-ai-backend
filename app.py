@@ -1,22 +1,19 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
-import json
-from profile import build_system_prompt
+from profile import build_system_prompt, build_recruiter_prompt
 
 # ============================================
-# FLASK APP SETUP
+# SETUP
 # ============================================
-
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"]) # Allow React to call this server
+CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
 
-# Ollama runs locally on this URL
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "llama3.2"
 
-# Build system prompt once when server starts
 SYSTEM_PROMPT = build_system_prompt()
+RECRUITER_PROMPT = build_recruiter_prompt()
 
 print("✅ Personal AI Backend started")
 print(f"✅ Using model: {MODEL}")
@@ -38,26 +35,35 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        # Get message from React
         data = request.get_json()
         user_message = data.get("message", "")
+        # Get conversation history from React
+        history = data.get("history", [])
+        # Check if recruiter mode is on
+        recruiter_mode = data.get("recruiterMode", False)
 
         if not user_message:
             return jsonify({"error": "No message provided"}), 400
 
         print(f"📩 Received: {user_message}")
+        print(f"📚 History length: {len(history)}")
+        print(f"👔 Recruiter mode: {recruiter_mode}")
 
-        # Build messages for Ollama
-        messages = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": user_message
-            }
-        ]
+        # Pick the right system prompt
+        system = RECRUITER_PROMPT if recruiter_mode else SYSTEM_PROMPT
+
+        # Build messages — system prompt + history + new message
+        messages = [{"role": "system", "content": system}]
+
+        # Add conversation history for memory
+        for item in history[-6:]:  # Last 6 messages only
+            messages.append({
+                "role": item["role"],
+                "content": item["content"]
+            })
+
+        # Add current message
+        messages.append({"role": "user", "content": user_message})
 
         # Call Ollama
         response = requests.post(
@@ -65,29 +71,33 @@ def chat():
             json={
                 "model": MODEL,
                 "messages": messages,
-                "stream": False  # Get full response at once
+                "stream": False,
+                "options": {
+                    "temperature": 0.7,      # Creativity level 0-1
+                    "num_predict": 300,      # Max tokens — keeps answers short
+                    "top_p": 0.9
+                }
             },
             timeout=60
         )
 
-        # Check if Ollama responded ok
         if response.status_code != 200:
             return jsonify({"error": "Ollama error"}), 500
 
-        # Extract the answer
         result = response.json()
         answer = result["message"]["content"]
 
-        print(f"🤖 Answer: {answer[:80]}...")
+        print(f"🤖 Answer: {answer[:100]}...")
 
         return jsonify({
             "answer": answer,
-            "model": MODEL
+            "model": MODEL,
+            "recruiterMode": recruiter_mode
         })
 
     except requests.exceptions.ConnectionError:
         return jsonify({
-            "error": "Cannot connect to Ollama. Make sure it is running with: ollama serve"
+            "error": "Cannot connect to Ollama. Run: ollama serve"
         }), 503
 
     except Exception as e:
@@ -97,9 +107,8 @@ def chat():
 
 @app.route("/health", methods=["GET"])
 def health():
-    # Check if Ollama is running
     try:
-        response = requests.get("http://localhost:11434", timeout=3)
+        requests.get("http://localhost:11434", timeout=3)
         ollama_status = "running"
     except:
         ollama_status = "not running"
@@ -111,13 +120,9 @@ def health():
     })
 
 
-# ============================================
-# START SERVER
-# ============================================
-
 if __name__ == "__main__":
     print("\n🚀 Starting Madheshwaran's Personal AI Backend...")
-    print("📡 Server will run at: http://localhost:5000")
-    print("💬 Chat endpoint: http://localhost:5000/chat")
-    print("❤️  Health check: http://localhost:5000/health\n")
+    print("📡 Server: http://localhost:5000")
+    print("💬 Chat: http://localhost:5000/chat")
+    print("❤️  Health: http://localhost:5000/health\n")
     app.run(debug=True, port=5000)
