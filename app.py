@@ -9,7 +9,7 @@ from profile import build_system_prompt
 # ============================================
 
 app = Flask(__name__)
-CORS(app)  # Allow React to call this server
+CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"]) # Allow React to call this server
 
 # Ollama runs locally on this URL
 OLLAMA_URL = "http://localhost:11434/api/chat"
