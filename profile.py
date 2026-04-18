@@ -1,30 +1,37 @@
 # ============================================
 # MADHESHWARAN'S COMPLETE PROFILE
-# This is what the AI knows about you
 # ============================================
 
-profile = {
-    "personal": {
-        "name": "Madheshwaran Maruthamuthu",
-        "email": "madheshwaran402@gmail.com",
-        "location": "Tamil Nadu, India",
-        "status": "Engineering Student",
-        "github": "github.com/madheshwaran402-blip",
-        "bio": "VLSI Design student and hardware-focused innovator building FPGA-based deterministic systems and neuromorphic-inspired architectures."
-    },
+PROFILE = {
+    "name": "Madheshwaran Maruthamuthu",
+    "email": "madheshwaran402@gmail.com",
+    "location": "Tamil Nadu, India",
+    "status": "B.E./B.Tech VLSI Design & Technology Student, 2nd Year",
+    "github": "github.com/madheshwaran402-blip",
+    "bio": "Engineering student from Tamil Nadu building FPGA-based deterministic systems and neuromorphic-inspired hardware.",
 
     "education": {
-        "degree": "B.E. / B.Tech",
-        "specialization": "VLSI Design and Technology",
+        "degree": "B.E./B.Tech VLSI Design & Technology",
         "year": "2nd Year",
         "location": "Tamil Nadu, India",
         "focus": "Progressing toward core VLSI specialization"
     },
 
     "skills": {
-        "programming": ["Python (Brian2, Nengo)", "MATLAB / Simulink", "Java + DSA", "JavaScript", "Node.js"],
-        "hardware": ["Verilog", "SystemVerilog", "FPGA Design", "Digital Design", "FSM / FIFO / Counters", "Event-driven Architecture"],
-        "tools": ["MQTT", "Turbotic", "Linux RH104", "Git", "GitHub"]
+        "hardware": [
+            "Verilog", "SystemVerilog", "FPGA Design",
+            "Digital Design", "FSM/FIFO/Counters",
+            "Event-driven Architecture", "Hardware Description Languages"
+        ],
+        "programming": [
+            "Python (Brian2, Nengo)", "MATLAB/Simulink",
+            "Java + DSA", "JavaScript", "Node.js",
+            "TypeScript", "React"
+        ],
+        "tools": [
+            "MQTT", "Turbotic", "Linux RH104",
+            "Git", "GitHub", "Ollama", "Flask"
+        ]
     },
 
     "projects": [
@@ -38,161 +45,160 @@ profile = {
         {
             "name": "Smart Shoe Prototype",
             "status": "Patented",
-            "description": "ESP32-based shoe with air-bladder sole — Sport Mode and Casual Mode via mobile app. Includes MPU6050, MAX30102 sensors, pump control and battery management.",
-            "tech": ["ESP32", "IoT", "Embedded Systems"]
+            "description": "ESP32-based smart shoe with air-bladder sole switching between Sport Mode and Casual Mode via mobile app. Includes MPU6050 and MAX30102 sensors.",
+            "tech": ["ESP32", "IoT", "Embedded Systems", "Mobile App"]
         },
         {
             "name": "Smart Water Tank Automation",
             "status": "Completed",
-            "description": "MQTT-based dual-mode control system with live hardware mode and simulation demo mode. Built with Node.js and Turbotic.",
+            "description": "MQTT-based dual-mode control system with live hardware mode and simulation demo mode.",
             "tech": ["MQTT", "Node.js", "Turbotic"]
         },
         {
             "name": "Personal AI Assistant",
             "status": "In Progress",
-            "description": "AI chatbot that knows everything about Madheshwaran. Built over a 9-month roadmap using React and Ollama.",
-            "tech": ["React", "Python", "Ollama", "Flask"]
+            "description": "Full-stack AI chatbot built over a 9-month roadmap. React frontend with TypeScript, Python Flask backend, powered by Claude API.",
+            "tech": ["React", "TypeScript", "Python", "Flask", "Claude API"]
         }
     ],
 
     "research": {
         "interests": [
             "Neuromorphic Computing",
-            "Spiking Neural Networks (SNN)",
+            "Spiking Neural Networks (SNNs)",
             "Edge AI for Medical Systems",
-            "Safety-aware AI Systems",
-            "Event-driven Hardware"
+            "Safety-aware AI Architecture",
+            "Event-driven Hardware Design"
         ],
-        "goal": "Publish Scopus-indexed research in neuromorphic hardware"
+        "goal": "Publish Scopus-indexed research in neuromorphic hardware and contribute to brain-inspired computing systems."
     },
 
     "goals": {
-        "primary": "Core VLSI / Hardware Engineering role",
-        "secondary": "Software / Programming role",
-        "long_term": [
-            "Build neuromorphic hardware systems",
-            "Publish Scopus-indexed research",
-            "Develop real-world safety-critical systems"
+        "primary": "Core VLSI/Hardware Engineering role at a semiconductor company",
+        "secondary": "Build production-grade neuromorphic hardware systems",
+        "longTerm": [
+            "Publish research in IEEE/Scopus journals",
+            "Scale Determinex to TRL 4-5",
+            "Build Safety Watch Platform product",
+            "Contribute to open-source hardware projects"
         ]
     },
 
     "achievements": [
         {
             "title": "IDEATHON 1.0 Winner",
-            "organizer": "PSNA College of Engineering and Technology — IT Dept",
-            "team": "Determinex",
-            "domain": "Industry Innovation & Infrastructure",
-            "prize": "Medal + Cash Prize"
+            "organizer": "PSNA College of Engineering and Technology",
+            "team": "Team Determinex",
+            "domain": "Industry Innovation and Infrastructure",
+            "prize": "Medal and Cash Prize"
         }
     ],
 
     "startups": [
         {
             "name": "Determinex",
-            "focus": "Data integrity and event-driven hardware systems"
+            "focus": "Data integrity and event-driven hardware systems",
+            "stage": "Prototype"
         },
         {
             "name": "Safety Watch Platform",
             "focus": "Offline wearable-to-wearable alert system",
-            "products": ["Hospital Monitoring Watch", "Elder Safety Watch", "Child Safety Watch", "Couple Safety Watch"]
+            "products": [
+                "Hospital safety wearable",
+                "Elder care wearable",
+                "Child safety wearable",
+                "Couple safety wearable"
+            ]
         }
     ],
 
-    "personality": [
-        "Hardware-first mindset",
-        "Practical and implementation-focused",
-        "Competition-oriented thinking",
-        "System-level problem solving",
-        "Detail-oriented engineering approach"
+    "currentlyLearning": [
+        "Verilog + SystemVerilog Advanced",
+        "Java + Data Structures and Algorithms",
+        "Linux RH104",
+        "FPGA-based Design Patterns"
     ],
 
-    "currently_learning": [
-        "Verilog + SystemVerilog (Advanced)",
-        "Java + Data Structures",
-        "Linux RH104",
-        "FPGA-based Design"
+    "personality": [
+        "Problem solver",
+        "Hardware enthusiast",
+        "Curious about neuromorphic systems",
+        "Passionate about Tamil Nadu innovation ecosystem"
     ]
 }
 
 
-def build_system_prompt():
-    p = profile
+def build_system_prompt(recruiter_mode: bool = False) -> str:
+    """Build the AI system prompt with full profile context."""
 
-    projects_text = ""
-    for proj in p["projects"]:
-        projects_text += f"\n  - {proj['name']} ({proj['status']}): {proj['description']}"
-        if "achievement" in proj:
-            projects_text += f" | Achievement: {proj['achievement']}"
+    profile_text = f"""
+You are Madheshwaran's personal AI assistant. You know everything about him and speak on his behalf.
 
-    achievements_text = ""
-    for ach in p["achievements"]:
-        achievements_text += f"\n  - {ach['title']} at {ach['organizer']}. Prize: {ach['prize']}"
-
-    startups_text = ""
-    for s in p["startups"]:
-        startups_text += f"\n  - {s['name']}: {s['focus']}"
-
-    system_prompt = f"""You are the personal AI assistant for Madheshwaran Maruthamuthu, a VLSI Design student and hardware innovator from Tamil Nadu, India.
-
-ROLE: Represent Madheshwaran professionally to recruiters, professors, and collaborators.
-
-STRICT RULES:
-1. Answer in maximum 3 sentences unless more detail is specifically requested
-2. Always answer in first person — "Madheshwaran has..." or "His project..."
-3. Never make up information — only use data provided below
-4. Be confident, professional and specific
-5. If asked something not in the data, say "That information isn't in my profile yet"
-6. For technical questions, show depth and enthusiasm
-7. End answers with a relevant follow-up suggestion when appropriate
-
-TONE: Professional, confident, concise. Like a smart portfolio assistant, not a chatbot.
-
-=== PROFILE DATA ===
-
-NAME: {p['personal']['name']}
-LOCATION: {p['personal']['location']}
-EMAIL: {p['personal']['email']}
-GITHUB: {p['personal']['github']}
-BIO: {p['personal']['bio']}
+ABOUT MADHESHWARAN:
+Name: {PROFILE['name']}
+Location: {PROFILE['location']}
+Status: {PROFILE['status']}
+Email: {PROFILE['email']}
+GitHub: {PROFILE['github']}
+Bio: {PROFILE['bio']}
 
 EDUCATION:
-{p['education']['degree']} in {p['education']['specialization']}, {p['education']['year']} — {p['education']['location']}
+{PROFILE['education']['degree']} - {PROFILE['education']['year']}
+Location: {PROFILE['education']['location']}
+Focus: {PROFILE['education']['focus']}
 
-HARDWARE & VLSI SKILLS: {', '.join(p['skills']['hardware'])}
-PROGRAMMING SKILLS: {', '.join(p['skills']['programming'])}
-TOOLS: {', '.join(p['skills']['tools'])}
+SKILLS:
+Hardware: {', '.join(PROFILE['skills']['hardware'])}
+Programming: {', '.join(PROFILE['skills']['programming'])}
+Tools: {', '.join(PROFILE['skills']['tools'])}
 
-PROJECTS:{projects_text}
+PROJECTS:
+{chr(10).join([f"- {p['name']} ({p['status']}): {p['description']} Tech: {', '.join(p['tech'])}" for p in PROFILE['projects']])}
 
-RESEARCH INTERESTS: {', '.join(p['research']['interests'])}
-RESEARCH GOAL: {p['research']['goal']}
+RESEARCH INTERESTS:
+{', '.join(PROFILE['research']['interests'])}
+Goal: {PROFILE['research']['goal']}
 
 CAREER GOALS:
-Primary: {p['goals']['primary']}
-Long-term: {', '.join(p['goals']['long_term'])}
+Primary: {PROFILE['goals']['primary']}
+Secondary: {PROFILE['goals']['secondary']}
+Long-term: {', '.join(PROFILE['goals']['longTerm'])}
 
-ACHIEVEMENTS:{achievements_text}
+ACHIEVEMENTS:
+{chr(10).join([f"- {a['title']} by {a['organizer']} - {a['prize']}" for a in PROFILE['achievements']])}
 
-STARTUPS:{startups_text}
+STARTUPS:
+{chr(10).join([f"- {s['name']}: {s['focus']}" for s in PROFILE['startups']])}
 
-CURRENTLY LEARNING: {', '.join(p['currently_learning'])}
-
-PERSONALITY: {', '.join(p['personality'])}
+CURRENTLY LEARNING:
+{', '.join(PROFILE['currentlyLearning'])}
 """
-    return system_prompt
 
-
-def build_recruiter_prompt():
-    """Special prompt for recruiter mode — more formal"""
-    base = build_system_prompt()
-    recruiter_addition = """
-SPECIAL INSTRUCTION — RECRUITER MODE:
-This person is a recruiter evaluating Madheshwaran for a position.
-- Be extra professional and highlight achievements prominently
-- Mention specific technical skills relevant to hardware/VLSI roles
-- Emphasize the patented project and competition win
-- Keep answers concise — recruiters are busy
-- Always mention GitHub: github.com/madheshwaran402-blip
+    if recruiter_mode:
+        tone = """
+TONE INSTRUCTIONS (Recruiter Mode ON):
+- Be formal and professional
+- Emphasize technical achievements and skills
+- Highlight Determinex and IDEATHON win prominently
+- Focus on career readiness and growth potential
+- Use structured responses with clear sections
+- Mention specific technical skills relevant to VLSI/hardware roles
 """
-    return base + recruiter_addition
-    return system_prompt
+    else:
+        tone = """
+TONE INSTRUCTIONS:
+- Be friendly, conversational, and enthusiastic
+- Speak naturally as Madheshwaran's AI assistant
+- Keep responses concise but informative
+- Use first person when referring to Madheshwaran (e.g. "He built..." or "Madheshwaran's work...")
+- Show genuine excitement about hardware and neuromorphic computing
+"""
+
+    return profile_text + tone + """
+IMPORTANT RULES:
+- Only answer questions about Madheshwaran
+- If asked something unrelated, politely redirect
+- Never make up information not in the profile
+- Keep responses under 200 words unless more detail is requested
+- Always be helpful and positive
+"""

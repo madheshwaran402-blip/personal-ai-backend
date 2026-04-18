@@ -1,76 +1,34 @@
+import os
+import json
+import requests
 from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
-import requests
-import json
-import time
-from profile import build_system_prompt, build_recruiter_prompt
+from dotenv import load_dotenv
+from profile import build_system_prompt, PROFILE
 
-# ============================================
-# SETUP
-# ============================================
+load_dotenv()
+
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
+CORS(app, origins=[
+    "http://localhost:3000",
+    "https://madheshwaran-ai.vercel.app"
+])
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL = "llama3.2"
-MAX_RETRIES = 2
-
-SYSTEM_PROMPT = build_system_prompt()
-RECRUITER_PROMPT = build_recruiter_prompt()
-
-print("✅ Personal AI Backend started")
-print(f"✅ Using model: {MODEL}")
-print("✅ Error handling enabled")
-
-# ============================================
-# HELPERS
-# ============================================
-
-def call_ollama(messages, stream=False):
-    """Call Ollama with retry logic"""
-    for attempt in range(MAX_RETRIES):
-        try:
-            response = requests.post(
-                OLLAMA_URL,
-                json={
-                    "model": MODEL,
-                    "messages": messages,
-                    "stream": stream,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_predict": 300,
-                        "top_p": 0.9
-                    }
-                },
-                stream=stream,
-                timeout=60
-            )
-            if response.status_code == 200:
-                return response
-            print(f"⚠️ Attempt {attempt + 1} failed: {response.status_code}")
-
-        except requests.exceptions.Timeout:
-            print(f"⚠️ Attempt {attempt + 1} timed out")
-        except requests.exceptions.ConnectionError:
-            print(f"⚠️ Attempt {attempt + 1} connection error")
-
-        if attempt < MAX_RETRIES - 1:
-            time.sleep(1)  # Wait before retry
-
-    return None
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+MODEL = os.getenv("MODEL", "llama3.2")
+MAX_HISTORY = 6
 
 
-def build_messages(user_message, history, recruiter_mode):
-    """Build message array for Ollama"""
-    system = RECRUITER_PROMPT if recruiter_mode else SYSTEM_PROMPT
-    messages = [{"role": "system", "content": system}]
-    for item in history[-6:]:
-        messages.append({
-            "role": item["role"],
-            "content": item["content"]
-        })
-    messages.append({"role": "user", "content": user_message})
-    return messages
+def get_recent_history(history: list) -> list:
+    return history[-MAX_HISTORY:] if len(history) > MAX_HISTORY else history
+
+
+def check_ollama() -> bool:
+    try:
+        res = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
+        return res.status_code == 200
+    except Exception:
+        return False
 
 
 # ============================================
@@ -81,136 +39,147 @@ def build_messages(user_message, history, recruiter_mode):
 def home():
     return jsonify({
         "status": "running",
-        "message": "Madheshwaran's Personal AI Backend",
-        "model": MODEL
+        "model": MODEL,
+        "assistant": "Madheshwaran Personal AI",
+        "version": "2.0"
     })
 
 
-@app.route("/chat/stream", methods=["POST"])
-def chat_stream():
-    try:
-        data = request.get_json()
-        user_message = data.get("message", "").strip()
-        history = data.get("history", [])
-        recruiter_mode = data.get("recruiterMode", False)
-
-        if not user_message:
-            return jsonify({"error": "No message provided"}), 400
-
-        if len(user_message) > 500:
-            return jsonify({"error": "Message too long (max 500 chars)"}), 400
-
-        print(f"📩 Stream: {user_message[:60]}...")
-
-        messages = build_messages(user_message, history, recruiter_mode)
-
-        def generate():
-            response = call_ollama(messages, stream=True)
-
-            if response is None:
-                yield f"data: {json.dumps({'error': 'AI unavailable after retries'})}\n\n"
-                return
-
-            for line in response.iter_lines():
-                if line:
-                    try:
-                        chunk = json.loads(line.decode('utf-8'))
-                        if "message" in chunk:
-                            word = chunk["message"].get("content", "")
-                            if word:
-                                yield f"data: {json.dumps({'word': word})}\n\n"
-
-                        if chunk.get("done", False):
-                            yield f"data: {json.dumps({'done': True})}\n\n"
-                            break
-                    except json.JSONDecodeError:
-                        continue
-
-        return Response(
-            stream_with_context(generate()),
-            mimetype='text/event-stream',
-            headers={
-                'Cache-Control': 'no-cache',
-                'X-Accel-Buffering': 'no'
-            }
-        )
-
-    except Exception as e:
-        print(f"❌ Stream error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+@app.route("/health", methods=["GET"])
+def health():
+    ollama_ok = check_ollama()
+    return jsonify({
+        "backend": "running",
+        "ollama": "running" if ollama_ok else "offline",
+        "model": MODEL,
+        "streaming": True
+    })
 
 
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
         data = request.get_json()
-        user_message = data.get("message", "").strip()
+        message = data.get("message", "").strip()
         history = data.get("history", [])
         recruiter_mode = data.get("recruiterMode", False)
 
-        if not user_message:
+        if not message:
             return jsonify({"error": "No message provided"}), 400
 
-        if len(user_message) > 500:
-            return jsonify({"error": "Message too long"}), 400
+        system_prompt = build_system_prompt(recruiter_mode)
+        recent_history = get_recent_history(history)
 
-        messages = build_messages(user_message, history, recruiter_mode)
-        response = call_ollama(messages, stream=False)
+        messages = recent_history + [
+            {"role": "user", "content": message}
+        ]
 
-        if response is None:
-            return jsonify({
-                "error": "AI unavailable. Check Ollama is running."
-            }), 503
+        response = requests.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt}
+                ] + messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.7,
+                    "num_predict": 300,
+                    "top_p": 0.9
+                }
+            },
+            timeout=120
+        )
 
-        result = response.json()
-        answer = result["message"]["content"]
-        return jsonify({"answer": answer, "model": MODEL})
+        data_response = response.json()
+        answer = data_response.get("message", {}).get("content", "")
 
+        return jsonify({
+            "answer": answer,
+            "model": MODEL,
+            "recruiterMode": recruiter_mode
+        })
+
+    except requests.exceptions.ConnectionError:
+        return jsonify({
+            "error": "Ollama is not running. Start with: ollama serve"
+        }), 503
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/health", methods=["GET"])
-def health():
+@app.route("/chat/stream", methods=["POST"])
+def chat_stream():
     try:
-        requests.get("http://localhost:11434", timeout=3)
-        ollama_status = "running"
-    except:
-        ollama_status = "not running"
+        data = request.get_json()
+        message = data.get("message", "").strip()
+        history = data.get("history", [])
+        recruiter_mode = data.get("recruiterMode", False)
 
-    return jsonify({
-        "backend": "running",
-        "ollama": ollama_status,
-        "model": MODEL,
-        "streaming": True,
-        "max_retries": MAX_RETRIES
-    })
+        if not message:
+            return jsonify({"error": "No message provided"}), 400
 
+        system_prompt = build_system_prompt(recruiter_mode)
+        recent_history = get_recent_history(history)
 
-# ============================================
-# ERROR HANDLERS
-# ============================================
+        messages = recent_history + [
+            {"role": "user", "content": message}
+        ]
 
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({"error": "Endpoint not found"}), 404
+        def generate():
+            try:
+                response = requests.post(
+                    f"{OLLAMA_URL}/api/chat",
+                    json={
+                        "model": MODEL,
+                        "messages": [
+                            {"role": "system", "content": system_prompt}
+                        ] + messages,
+                        "stream": True,
+                        "options": {
+                            "temperature": 0.7,
+                            "num_predict": 300,
+                            "top_p": 0.9
+                        }
+                    },
+                    stream=True,
+                    timeout=120
+                )
 
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            chunk = json.loads(line.decode("utf-8"))
+                            word = chunk.get("message", {}).get("content", "")
+                            if word:
+                                yield f"data: {json.dumps({'word': word})}\n\n"
+                            if chunk.get("done"):
+                                yield f"data: {json.dumps({'done': True})}\n\n"
+                                break
+                        except json.JSONDecodeError:
+                            continue
 
-@app.errorhandler(405)
-def method_not_allowed(e):
-    return jsonify({"error": "Method not allowed"}), 405
+            except requests.exceptions.ConnectionError:
+                yield f"data: {json.dumps({'error': 'Ollama not running. Run: ollama serve'})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive"
+            }
+        )
 
-@app.errorhandler(500)
-def server_error(e):
-    return jsonify({"error": "Internal server error"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
-    print("\n🚀 Starting Madheshwaran's Personal AI Backend...")
-    print("📡 Server: http://localhost:5000")
-    print("💬 Stream: http://localhost:5000/chat/stream")
-    print("💬 Chat:   http://localhost:5000/chat")
-    print("❤️  Health: http://localhost:5000/health\n")
-    app.run(debug=True, port=5000, threaded=True)
+    print(f"Starting Madheshwaran Personal AI Backend")
+    print(f"Model: {MODEL}")
+    print(f"Ollama URL: {OLLAMA_URL}")
+    app.run(debug=True, host="0.0.0.0", port=5000)
