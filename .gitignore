@@ -9,3 +9,4 @@ __pycache__/
 *.sqlite3
 instance/
 embeddings_cache.pkl
+faiss_index.pkl

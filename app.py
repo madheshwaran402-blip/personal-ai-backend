@@ -5,14 +5,12 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from dotenv import load_dotenv
 from madheshwaran_profile import build_system_prompt, PROFILE
+from faiss_store import get_store
 
 load_dotenv()
 
 app = Flask(__name__)
 
-# ============================================
-# CORS — allow frontend domains
-# ============================================
 CORS(app, origins=[
     "http://localhost:3000",
     "http://localhost:5173",
@@ -24,6 +22,11 @@ MODEL = os.getenv("MODEL", "madheshwaran-ai")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "llama3.2")
 PORT = int(os.getenv("PORT", 5000))
 MAX_HISTORY = 6
+
+# Initialize FAISS store on startup
+print("Initializing RAG system...")
+rag_store = get_store()
+print(f"RAG ready with {rag_store.get_stats()['total_chunks']} chunks")
 
 
 def get_recent_history(history: list) -> list:
@@ -56,6 +59,27 @@ def get_best_model() -> str:
     if check_model_exists(MODEL):
         return MODEL
     return FALLBACK_MODEL
+
+
+def build_rag_prompt(
+    query: str,
+    system_prompt: str,
+    recruiter_mode: bool = False
+) -> str:
+    context = rag_store.get_context(query, top_k=3, min_score=0.3)
+
+    if context:
+        rag_addition = f"""
+=== RETRIEVED CONTEXT (Most Relevant Information) ===
+{context}
+
+=== END CONTEXT ===
+
+Use the above context to answer the question accurately.
+Prioritize this specific information over general knowledge.
+"""
+        return system_prompt + rag_addition
+    return system_prompt
 
 
 def chat_with_ollama(
@@ -95,9 +119,9 @@ def home():
     return jsonify({
         "status": "running",
         "model": MODEL,
-        "assistant": "Madheshwaran Personal AI",
-        "version": "2.0",
-        "environment": os.getenv("FLASK_ENV", "production")
+        "rag_chunks": rag_store.get_stats()["total_chunks"],
+        "assistant": "Madheshwaran Personal AI with RAG",
+        "version": "3.0"
     })
 
 
@@ -105,6 +129,7 @@ def home():
 def health():
     ollama_ok = check_ollama()
     model_exists = check_model_exists(MODEL) if ollama_ok else False
+    rag_stats = rag_store.get_stats()
 
     return jsonify({
         "backend": "running",
@@ -112,7 +137,12 @@ def health():
         "model": MODEL,
         "model_ready": model_exists,
         "fallback": FALLBACK_MODEL,
-        "streaming": True
+        "streaming": True,
+        "rag": {
+            "enabled": True,
+            "chunks": rag_stats["total_chunks"],
+            "categories": rag_stats["categories"]
+        }
     })
 
 
@@ -133,7 +163,10 @@ def chat():
         if len(message) > 1000:
             return jsonify({"error": "Message too long"}), 400
 
-        system_prompt = build_system_prompt(recruiter_mode)
+        # Build RAG-enhanced prompt
+        base_prompt = build_system_prompt(recruiter_mode)
+        rag_prompt = build_rag_prompt(message, base_prompt, recruiter_mode)
+
         recent_history = get_recent_history(history)
         messages = recent_history + [
             {"role": "user", "content": message}
@@ -142,7 +175,7 @@ def chat():
         best_model = get_best_model()
         response = chat_with_ollama(
             messages,
-            system_prompt,
+            rag_prompt,
             best_model,
             stream=False
         )
@@ -153,7 +186,8 @@ def chat():
         return jsonify({
             "answer": answer,
             "model": best_model,
-            "recruiterMode": recruiter_mode
+            "recruiterMode": recruiter_mode,
+            "rag_used": True
         })
 
     except requests.exceptions.ConnectionError:
@@ -186,7 +220,9 @@ def chat_stream():
         if len(message) > 1000:
             return jsonify({"error": "Message too long"}), 400
 
-        system_prompt = build_system_prompt(recruiter_mode)
+        base_prompt = build_system_prompt(recruiter_mode)
+        rag_prompt = build_rag_prompt(message, base_prompt, recruiter_mode)
+
         recent_history = get_recent_history(history)
         messages = recent_history + [
             {"role": "user", "content": message}
@@ -198,7 +234,7 @@ def chat_stream():
             try:
                 response = chat_with_ollama(
                     messages,
-                    system_prompt,
+                    rag_prompt,
                     best_model,
                     stream=True
                 )
@@ -217,9 +253,9 @@ def chat_stream():
                             continue
 
             except requests.exceptions.ConnectionError:
-                yield f"data: {json.dumps({'error': 'AI is starting up. Try again in 30 seconds.'})}\n\n"
+                yield f"data: {json.dumps({'error': 'Ollama not running. Run: ollama serve'})}\n\n"
             except requests.exceptions.Timeout:
-                yield f"data: {json.dumps({'error': 'Request timed out. Please try again.'})}\n\n"
+                yield f"data: {json.dumps({'error': 'Request timed out.'})}\n\n"
             except Exception as e:
                 app.logger.error(f"Stream error: {str(e)}")
                 yield f"data: {json.dumps({'error': 'Something went wrong'})}\n\n"
@@ -238,6 +274,23 @@ def chat_stream():
     except Exception as e:
         app.logger.error(f"Stream setup error: {str(e)}")
         return jsonify({"error": "Something went wrong"}), 500
+
+
+@app.route("/search", methods=["POST"])
+def semantic_search():
+    try:
+        data = request.get_json()
+        query = data.get("query", "").strip()
+        top_k = data.get("top_k", 3)
+
+        if not query:
+            return jsonify({"error": "No query provided"}), 400
+
+        results = rag_store.get_context_with_scores(query, top_k)
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/models", methods=["GET"])
@@ -273,7 +326,7 @@ def internal_error(e):
 
 if __name__ == "__main__":
     is_dev = os.getenv("FLASK_ENV") == "development"
-    print(f"Starting Madheshwaran Personal AI Backend v2.0")
+    print(f"Starting Madheshwaran Personal AI Backend v3.0 with RAG")
     print(f"Environment: {'Development' if is_dev else 'Production'}")
     print(f"Primary Model: {MODEL}")
     print(f"Fallback Model: {FALLBACK_MODEL}")
