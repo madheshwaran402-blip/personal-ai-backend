@@ -4,7 +4,7 @@ import requests
 from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from dotenv import load_dotenv
-from profile import build_system_prompt, PROFILE
+from madheshwaran_profile import build_system_prompt, PROFILE
 
 load_dotenv()
 
