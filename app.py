@@ -9,16 +9,21 @@ from profile import build_system_prompt, PROFILE
 load_dotenv()
 
 app = Flask(__name__)
+
+# ============================================
+# CORS — allow frontend domains
+# ============================================
 CORS(app, origins=[
     "http://localhost:3000",
+    "http://localhost:5173",
     "https://madheshwaran-ai.vercel.app"
 ])
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.getenv("MODEL", "madheshwaran-ai")
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "llama3.2")
+PORT = int(os.getenv("PORT", 5000))
 MAX_HISTORY = 6
-MAX_RETRIES = 2
 
 
 def get_recent_history(history: list) -> list:
@@ -38,7 +43,10 @@ def check_model_exists(model_name: str) -> bool:
         res = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
         if res.status_code == 200:
             models = res.json().get("models", [])
-            return any(m.get("name", "").startswith(model_name) for m in models)
+            return any(
+                m.get("name", "").startswith(model_name)
+                for m in models
+            )
         return False
     except Exception:
         return False
@@ -47,7 +55,6 @@ def check_model_exists(model_name: str) -> bool:
 def get_best_model() -> str:
     if check_model_exists(MODEL):
         return MODEL
-    print(f"Model {MODEL} not found, falling back to {FALLBACK_MODEL}")
     return FALLBACK_MODEL
 
 
@@ -89,7 +96,8 @@ def home():
         "status": "running",
         "model": MODEL,
         "assistant": "Madheshwaran Personal AI",
-        "version": "2.0"
+        "version": "2.0",
+        "environment": os.getenv("FLASK_ENV", "production")
     })
 
 
@@ -112,12 +120,18 @@ def health():
 def chat():
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
         message = data.get("message", "").strip()
         history = data.get("history", [])
         recruiter_mode = data.get("recruiterMode", False)
 
         if not message:
             return jsonify({"error": "No message provided"}), 400
+
+        if len(message) > 1000:
+            return jsonify({"error": "Message too long"}), 400
 
         system_prompt = build_system_prompt(recruiter_mode)
         recent_history = get_recent_history(history)
@@ -126,7 +140,6 @@ def chat():
         ]
 
         best_model = get_best_model()
-
         response = chat_with_ollama(
             messages,
             system_prompt,
@@ -145,22 +158,33 @@ def chat():
 
     except requests.exceptions.ConnectionError:
         return jsonify({
-            "error": "Ollama is not running. Start with: ollama serve"
+            "error": "AI is starting up. Please try again in 30 seconds."
         }), 503
+    except requests.exceptions.Timeout:
+        return jsonify({
+            "error": "Request timed out. Please try again."
+        }), 504
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(f"Chat error: {str(e)}")
+        return jsonify({"error": "Something went wrong"}), 500
 
 
 @app.route("/chat/stream", methods=["POST"])
 def chat_stream():
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
         message = data.get("message", "").strip()
         history = data.get("history", [])
         recruiter_mode = data.get("recruiterMode", False)
 
         if not message:
             return jsonify({"error": "No message provided"}), 400
+
+        if len(message) > 1000:
+            return jsonify({"error": "Message too long"}), 400
 
         system_prompt = build_system_prompt(recruiter_mode)
         recent_history = get_recent_history(history)
@@ -193,9 +217,12 @@ def chat_stream():
                             continue
 
             except requests.exceptions.ConnectionError:
-                yield f"data: {json.dumps({'error': 'Ollama not running. Run: ollama serve'})}\n\n"
+                yield f"data: {json.dumps({'error': 'AI is starting up. Try again in 30 seconds.'})}\n\n"
+            except requests.exceptions.Timeout:
+                yield f"data: {json.dumps({'error': 'Request timed out. Please try again.'})}\n\n"
             except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                app.logger.error(f"Stream error: {str(e)}")
+                yield f"data: {json.dumps({'error': 'Something went wrong'})}\n\n"
 
         return Response(
             stream_with_context(generate()),
@@ -203,12 +230,14 @@ def chat_stream():
             headers={
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
-                "Connection": "keep-alive"
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*"
             }
         )
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(f"Stream setup error: {str(e)}")
+        return jsonify({"error": "Something went wrong"}), 500
 
 
 @app.route("/models", methods=["GET"])
@@ -227,12 +256,31 @@ def list_models():
         return jsonify({"error": str(e)}), 503
 
 
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "Route not found"}), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({"error": "Method not allowed"}), 405
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    return jsonify({"error": "Internal server error"}), 500
+
+
 if __name__ == "__main__":
+    is_dev = os.getenv("FLASK_ENV") == "development"
     print(f"Starting Madheshwaran Personal AI Backend v2.0")
+    print(f"Environment: {'Development' if is_dev else 'Production'}")
     print(f"Primary Model: {MODEL}")
     print(f"Fallback Model: {FALLBACK_MODEL}")
     print(f"Ollama URL: {OLLAMA_URL}")
-    print(f"Ollama Running: {check_ollama()}")
-    if check_ollama():
-        print(f"Custom Model Ready: {check_model_exists(MODEL)}")
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    print(f"Port: {PORT}")
+    app.run(
+        debug=is_dev,
+        host="0.0.0.0",
+        port=PORT
+    )
