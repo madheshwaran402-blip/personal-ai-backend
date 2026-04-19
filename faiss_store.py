@@ -4,14 +4,11 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 from knowledge_base import KNOWLEDGE_CHUNKS
-
-# ============================================
-# FAISS VECTOR STORE
-# ============================================
+from query_processor import get_search_query
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 FAISS_INDEX_FILE = "faiss_index.pkl"
-DIMENSION = 384  # all-MiniLM-L6-v2 output dimension
+DIMENSION = 384
 
 
 class FAISSStore:
@@ -34,42 +31,35 @@ class FAISSStore:
 
         print("Building FAISS index...")
 
-        # Generate embeddings
         embeddings = self.model.encode(
             self.texts,
             show_progress_bar=True,
             normalize_embeddings=True
         )
 
-        # Convert to float32 (FAISS requirement)
         embeddings = np.array(embeddings, dtype=np.float32)
-
-        # Create FAISS index
-        # IndexFlatIP = Inner Product (cosine similarity with normalized vectors)
         self.index = faiss.IndexFlatIP(DIMENSION)
-
-        # Add embeddings to index
         self.index.add(embeddings)
 
-        # Cache the index
         with open(FAISS_INDEX_FILE, "wb") as f:
             pickle.dump(self.index, f)
 
         print(f"FAISS index built with {self.index.ntotal} vectors")
-        print(f"Index cached to {FAISS_INDEX_FILE}")
 
     def search(
         self,
         query: str,
         top_k: int = 3,
-        min_score: float = 0.3
+        min_score: float = 0.3,
+        use_expansion: bool = True
     ) -> list:
         if self.index is None:
             self.build_index()
 
-        # Encode query
+        search_query = get_search_query(query) if use_expansion else query
+
         query_embedding = self.model.encode(
-            [query],
+            [search_query],
             normalize_embeddings=True
         )
         query_embedding = np.array(
@@ -77,7 +67,6 @@ class FAISSStore:
             dtype=np.float32
         )
 
-        # Search FAISS index
         scores, indices = self.index.search(query_embedding, top_k)
 
         results = []
@@ -106,7 +95,14 @@ class FAISSStore:
         if not results:
             return ""
 
-        context_parts = [r["content"] for r in results]
+        seen = set()
+        unique_results = []
+        for r in results:
+            if r["content"] not in seen:
+                seen.add(r["content"])
+                unique_results.append(r)
+
+        context_parts = [r["content"] for r in unique_results]
         return "\n\n".join(context_parts)
 
     def get_context_with_scores(
@@ -118,10 +114,16 @@ class FAISSStore:
         return {
             "context": "\n\n".join([r["content"] for r in results]),
             "results": results,
-            "query": query
+            "query": query,
+            "expanded_query": get_search_query(query)
         }
 
-    def add_chunk(self, content: str, category: str, chunk_id: str):
+    def add_chunk(
+        self,
+        content: str,
+        category: str,
+        chunk_id: str
+    ):
         embedding = self.model.encode(
             [content],
             normalize_embeddings=True
@@ -148,11 +150,8 @@ class FAISSStore:
         }
 
 
-# ============================================
-# SINGLETON
-# ============================================
-
 _store = None
+
 
 def get_store() -> FAISSStore:
     global _store
@@ -161,10 +160,6 @@ def get_store() -> FAISSStore:
         _store.build_index()
     return _store
 
-
-# ============================================
-# TEST
-# ============================================
 
 if __name__ == "__main__":
     store = FAISSStore()
@@ -180,18 +175,18 @@ if __name__ == "__main__":
     test_queries = [
         "What sensors does the Smart Shoe have?",
         "Tell me about Determinex FPGA project",
-        "What are Madheshwaran's research interests?",
-        "Did he win any competitions or awards?",
+        "What are Madheshwaran research interests?",
+        "Did he win any competitions?",
         "What programming languages does he know?",
-        "Tell me about the Safety Watch startup",
-        "What is his career goal?",
-        "What is the water tank project?",
-        "What are his hardware skills?",
-        "Tell me about neuromorphic computing"
+        "Safety Watch startup",
+        "Career goal",
+        "Water tank project",
+        "Hardware skills",
+        "Neuromorphic computing"
     ]
 
     print("\n" + "=" * 50)
-    print("SEMANTIC SEARCH TESTS")
+    print("SEMANTIC SEARCH WITH QUERY EXPANSION")
     print("=" * 50)
 
     for query in test_queries:
