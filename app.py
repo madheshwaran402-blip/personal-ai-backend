@@ -6,6 +6,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from madheshwaran_profile import build_system_prompt, PROFILE
 from faiss_store import get_store
+from memory_store import get_memory_store
 
 load_dotenv()
 
@@ -23,10 +24,13 @@ FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "llama3.2")
 PORT = int(os.getenv("PORT", 5000))
 MAX_HISTORY = 6
 
-# Initialize FAISS store on startup
 print("Initializing RAG system...")
 rag_store = get_store()
-print(f"RAG ready with {rag_store.get_stats()['total_chunks']} chunks")
+print(f"RAG ready: {rag_store.get_stats()['total_chunks']} chunks")
+
+print("Initializing memory system...")
+memory_store = get_memory_store()
+print(f"Memory ready: {memory_store.get_stats()['total_conversations']} stored")
 
 
 def get_recent_history(history: list) -> list:
@@ -61,24 +65,38 @@ def get_best_model() -> str:
     return FALLBACK_MODEL
 
 
-def build_rag_prompt(
+def build_enhanced_prompt(
     query: str,
-    system_prompt: str,
-    recruiter_mode: bool = False
+    session_id: str,
+    system_prompt: str
 ) -> str:
-    context = rag_store.get_context(query, top_k=3, min_score=0.3)
+    rag_context = rag_store.get_context(
+        query, top_k=3, min_score=0.3
+    )
+    memory_context = memory_store.get_relevant_memories(
+        query, session_id, top_k=2
+    )
 
-    if context:
-        rag_addition = f"""
-=== RETRIEVED CONTEXT (Most Relevant Information) ===
-{context}
+    additions = []
 
-=== END CONTEXT ===
+    if rag_context:
+        additions.append(
+            f"=== KNOWLEDGE BASE ===\n{rag_context}\n=== END KNOWLEDGE ==="
+        )
 
-Use the above context to answer the question accurately.
-Prioritize this specific information over general knowledge.
-"""
-        return system_prompt + rag_addition
+    if memory_context:
+        additions.append(
+            f"=== PAST CONVERSATIONS ===\n{memory_context}\n=== END MEMORIES ==="
+        )
+
+    if additions:
+        context_block = "\n\n".join(additions)
+        return (
+            system_prompt
+            + f"\n\n{context_block}\n\n"
+            + "Use the above context and memories to give a specific, accurate answer."
+        )
+
     return system_prompt
 
 
@@ -120,8 +138,9 @@ def home():
         "status": "running",
         "model": MODEL,
         "rag_chunks": rag_store.get_stats()["total_chunks"],
-        "assistant": "Madheshwaran Personal AI with RAG",
-        "version": "3.0"
+        "memory_conversations": memory_store.get_stats()["total_conversations"],
+        "assistant": "Madheshwaran Personal AI with RAG + Memory",
+        "version": "4.0"
     })
 
 
@@ -130,6 +149,7 @@ def health():
     ollama_ok = check_ollama()
     model_exists = check_model_exists(MODEL) if ollama_ok else False
     rag_stats = rag_store.get_stats()
+    memory_stats = memory_store.get_stats()
 
     return jsonify({
         "backend": "running",
@@ -142,6 +162,11 @@ def health():
             "enabled": True,
             "chunks": rag_stats["total_chunks"],
             "categories": rag_stats["categories"]
+        },
+        "memory": {
+            "enabled": True,
+            "total_conversations": memory_stats["total_conversations"],
+            "total_sessions": memory_stats["total_sessions"]
         }
     })
 
@@ -156,6 +181,7 @@ def chat():
         message = data.get("message", "").strip()
         history = data.get("history", [])
         recruiter_mode = data.get("recruiterMode", False)
+        session_id = data.get("sessionId", "default_session")
 
         if not message:
             return jsonify({"error": "No message provided"}), 400
@@ -163,9 +189,10 @@ def chat():
         if len(message) > 1000:
             return jsonify({"error": "Message too long"}), 400
 
-        # Build RAG-enhanced prompt
         base_prompt = build_system_prompt(recruiter_mode)
-        rag_prompt = build_rag_prompt(message, base_prompt, recruiter_mode)
+        enhanced_prompt = build_enhanced_prompt(
+            message, session_id, base_prompt
+        )
 
         recent_history = get_recent_history(history)
         messages = recent_history + [
@@ -175,7 +202,7 @@ def chat():
         best_model = get_best_model()
         response = chat_with_ollama(
             messages,
-            rag_prompt,
+            enhanced_prompt,
             best_model,
             stream=False
         )
@@ -183,11 +210,19 @@ def chat():
         data_response = response.json()
         answer = data_response.get("message", {}).get("content", "")
 
+        memory_store.save_conversation(
+            session_id,
+            message,
+            answer,
+            {"recruiter_mode": recruiter_mode}
+        )
+
         return jsonify({
             "answer": answer,
             "model": best_model,
             "recruiterMode": recruiter_mode,
-            "rag_used": True
+            "rag_used": True,
+            "memory_saved": True
         })
 
     except requests.exceptions.ConnectionError:
@@ -213,6 +248,7 @@ def chat_stream():
         message = data.get("message", "").strip()
         history = data.get("history", [])
         recruiter_mode = data.get("recruiterMode", False)
+        session_id = data.get("sessionId", "default_session")
 
         if not message:
             return jsonify({"error": "No message provided"}), 400
@@ -221,7 +257,9 @@ def chat_stream():
             return jsonify({"error": "Message too long"}), 400
 
         base_prompt = build_system_prompt(recruiter_mode)
-        rag_prompt = build_rag_prompt(message, base_prompt, recruiter_mode)
+        enhanced_prompt = build_enhanced_prompt(
+            message, session_id, base_prompt
+        )
 
         recent_history = get_recent_history(history)
         messages = recent_history + [
@@ -229,12 +267,13 @@ def chat_stream():
         ]
 
         best_model = get_best_model()
+        full_response = []
 
         def generate():
             try:
                 response = chat_with_ollama(
                     messages,
-                    rag_prompt,
+                    enhanced_prompt,
                     best_model,
                     stream=True
                 )
@@ -245,15 +284,23 @@ def chat_stream():
                             chunk = json.loads(line.decode("utf-8"))
                             word = chunk.get("message", {}).get("content", "")
                             if word:
+                                full_response.append(word)
                                 yield f"data: {json.dumps({'word': word})}\n\n"
                             if chunk.get("done"):
+                                complete_response = "".join(full_response)
+                                memory_store.save_conversation(
+                                    session_id,
+                                    message,
+                                    complete_response,
+                                    {"recruiter_mode": recruiter_mode}
+                                )
                                 yield f"data: {json.dumps({'done': True})}\n\n"
                                 break
                         except json.JSONDecodeError:
                             continue
 
             except requests.exceptions.ConnectionError:
-                yield f"data: {json.dumps({'error': 'Ollama not running. Run: ollama serve'})}\n\n"
+                yield f"data: {json.dumps({'error': 'Ollama not running.'})}\n\n"
             except requests.exceptions.Timeout:
                 yield f"data: {json.dumps({'error': 'Request timed out.'})}\n\n"
             except Exception as e:
@@ -276,6 +323,42 @@ def chat_stream():
         return jsonify({"error": "Something went wrong"}), 500
 
 
+@app.route("/memory", methods=["GET"])
+def get_memory_stats():
+    stats = memory_store.get_stats()
+    return jsonify(stats)
+
+
+@app.route("/memory/search", methods=["POST"])
+def search_memories():
+    try:
+        data = request.get_json()
+        query = data.get("query", "").strip()
+        top_k = data.get("top_k", 3)
+
+        if not query:
+            return jsonify({"error": "No query provided"}), 400
+
+        memories = memory_store.search_memories(query, top_k)
+        return jsonify({
+            "query": query,
+            "memories": memories,
+            "count": len(memories)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/memory/session/<session_id>", methods=["GET"])
+def get_session(session_id: str):
+    history = memory_store.get_session_history(session_id)
+    return jsonify({
+        "session_id": session_id,
+        "history": history,
+        "count": len(history)
+    })
+
+
 @app.route("/search", methods=["POST"])
 def semantic_search():
     try:
@@ -288,7 +371,6 @@ def semantic_search():
 
         results = rag_store.get_context_with_scores(query, top_k)
         return jsonify(results)
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -326,12 +408,11 @@ def internal_error(e):
 
 if __name__ == "__main__":
     is_dev = os.getenv("FLASK_ENV") == "development"
-    print(f"Starting Madheshwaran Personal AI Backend v3.0 with RAG")
+    print(f"\nStarting Madheshwaran Personal AI Backend v4.0")
+    print(f"Features: RAG + Memory + FAISS + Query Expansion")
     print(f"Environment: {'Development' if is_dev else 'Production'}")
-    print(f"Primary Model: {MODEL}")
-    print(f"Fallback Model: {FALLBACK_MODEL}")
-    print(f"Ollama URL: {OLLAMA_URL}")
-    print(f"Port: {PORT}")
+    print(f"Model: {MODEL} (fallback: {FALLBACK_MODEL})")
+    print(f"Port: {PORT}\n")
     app.run(
         debug=is_dev,
         host="0.0.0.0",

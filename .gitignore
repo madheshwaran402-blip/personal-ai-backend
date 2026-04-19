@@ -10,3 +10,4 @@ __pycache__/
 instance/
 embeddings_cache.pkl
 faiss_index.pkl
+memory.db
